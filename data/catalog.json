@@ -1,0 +1,167 @@
+[
+  {
+    "sku": "LV-GN-001",
+    "name": "Aadhya Gold Necklace",
+    "category": "necklace",
+    "metal": "22K gold",
+    "weight_grams": 18.5,
+    "price_inr": 115000,
+    "description": "Traditional temple-style gold necklace with intricate peacock motifs. Perfect for weddings and festivals.",
+    "stones": null,
+    "in_stock": true
+  },
+  {
+    "sku": "LV-GN-002",
+    "name": "Meera Layered Chain",
+    "category": "necklace",
+    "metal": "18K gold",
+    "weight_grams": 12.0,
+    "price_inr": 68000,
+    "description": "Modern layered chain necklace with delicate pendant. Lightweight everyday wear.",
+    "stones": null,
+    "in_stock": true
+  },
+  {
+    "sku": "LV-DN-001",
+    "name": "Priya Diamond Necklace",
+    "category": "necklace",
+    "metal": "18K white gold",
+    "weight_grams": 15.2,
+    "price_inr": 245000,
+    "description": "Elegant solitaire diamond pendant on a fine white gold chain. 0.5 carat VS1 clarity.",
+    "stones": "diamond 0.5ct VS1",
+    "in_stock": true
+  },
+  {
+    "sku": "LV-GE-001",
+    "name": "Kavya Gold Jhumkas",
+    "category": "earrings",
+    "metal": "22K gold",
+    "weight_grams": 8.4,
+    "price_inr": 52000,
+    "description": "Classic South Indian jhumka earrings with fine granulation work. Bridal favourite.",
+    "stones": null,
+    "in_stock": true
+  },
+  {
+    "sku": "LV-DE-001",
+    "name": "Ananya Diamond Studs",
+    "category": "earrings",
+    "metal": "18K white gold",
+    "weight_grams": 3.2,
+    "price_inr": 85000,
+    "description": "Round brilliant diamond stud earrings, 0.25 carat each. Timeless daily wear.",
+    "stones": "diamond 0.5ct total",
+    "in_stock": true
+  },
+  {
+    "sku": "LV-GB-001",
+    "name": "Lakshmi Gold Bangle Set",
+    "category": "bangles",
+    "metal": "22K gold",
+    "weight_grams": 32.0,
+    "price_inr": 198000,
+    "description": "Set of 4 matching gold bangles with Lakshmi coin motifs. Traditional design, size 2.6.",
+    "stones": null,
+    "in_stock": true
+  },
+  {
+    "sku": "LV-GB-002",
+    "name": "Rhea Slim Bangles",
+    "category": "bangles",
+    "metal": "18K gold",
+    "weight_grams": 14.0,
+    "price_inr": 79000,
+    "description": "Set of 6 sleek stackable bangles with matte finish. Modern minimal style.",
+    "stones": null,
+    "in_stock": true
+  },
+  {
+    "sku": "LV-GR-001",
+    "name": "Devi Gold Ring",
+    "category": "ring",
+    "metal": "22K gold",
+    "weight_grams": 4.8,
+    "price_inr": 30000,
+    "description": "Adjustable floral-pattern gold ring. Suitable for daily or festive wear.",
+    "stones": null,
+    "in_stock": true
+  },
+  {
+    "sku": "LV-DR-001",
+    "name": "Tara Diamond Ring",
+    "category": "ring",
+    "metal": "18K white gold",
+    "weight_grams": 3.5,
+    "price_inr": 135000,
+    "description": "Classic solitaire engagement ring with 0.4 carat round brilliant diamond, VVS2 clarity.",
+    "stones": "diamond 0.4ct VVS2",
+    "in_stock": true
+  },
+  {
+    "sku": "LV-DR-002",
+    "name": "Isha Eternity Band",
+    "category": "ring",
+    "metal": "18K rose gold",
+    "weight_grams": 2.8,
+    "price_inr": 92000,
+    "description": "Half-eternity band with 0.3 carat total diamonds set in rose gold. Beautiful anniversary gift.",
+    "stones": "diamond 0.3ct total",
+    "in_stock": true
+  },
+  {
+    "sku": "LV-SC-001",
+    "name": "Veda Silver Anklet Pair",
+    "category": "anklet",
+    "metal": "925 sterling silver",
+    "weight_grams": 22.0,
+    "price_inr": 4500,
+    "description": "Traditional silver anklets with small bells. Adjustable chain closure.",
+    "stones": null,
+    "in_stock": true
+  },
+  {
+    "sku": "LV-GC-001",
+    "name": "Nisha Gold Chain",
+    "category": "chain",
+    "metal": "22K gold",
+    "weight_grams": 10.0,
+    "price_inr": 62000,
+    "description": "24-inch rope-style gold chain. Versatile, pairs with any pendant.",
+    "stones": null,
+    "in_stock": true
+  },
+  {
+    "sku": "LV-GP-001",
+    "name": "Radha Pearl Set",
+    "category": "necklace_set",
+    "metal": "22K gold",
+    "weight_grams": 28.0,
+    "price_inr": 175000,
+    "description": "Necklace and earring set with freshwater pearls in gold settings. Elegant party wear.",
+    "stones": "freshwater pearls",
+    "in_stock": true
+  },
+  {
+    "sku": "LV-MG-001",
+    "name": "Arjun Men's Gold Chain",
+    "category": "chain",
+    "metal": "22K gold",
+    "weight_grams": 25.0,
+    "price_inr": 155000,
+    "description": "Heavy flat-link gold chain for men. 22 inches, bold statement piece.",
+    "stones": null,
+    "in_stock": true
+  },
+  {
+    "sku": "LV-MR-001",
+    "name": "Karan Men's Ring",
+    "category": "ring",
+    "metal": "18K gold",
+    "weight_grams": 6.5,
+    "price_inr": 38000,
+    "description": "Signet-style men's ring with brushed gold finish. Sizes 9-13 available.",
+    "stones": null,
+    "in_stock": false
+  }
+]

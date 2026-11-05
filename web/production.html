@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Agent — Production</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 3rem auto; padding: 0 1rem; }
+  button { font-size: 1.1rem; padding: .7rem 1.6rem; border-radius: 8px; border: 0; cursor: pointer; }
+  #start { background: #2563eb; color: #fff; } #stop { background: #dc2626; color: #fff; }
+  button:disabled { opacity: .4; cursor: default; }
+  #status { margin: 1rem 0 .3rem; color: #555; } #mic { font-size: .85rem; color: #555; margin-bottom: .3rem; }
+  #log { background: #111; color: #9f9; padding: 1rem; border-radius: 8px; height: 220px; overflow: auto;
+         font: 13px/1.4 ui-monospace, monospace; white-space: pre-wrap; }
+  input { padding: .4rem; }
+  .field { margin-bottom: .4rem; }
+  .field label { display: inline-block; width: 80px; font-size: .9rem; }
+  .field input { width: 340px; }
+</style>
+</head>
+<body>
+<h1>Voice Agent <small style="color:#888">production</small></h1>
+<p>Use <b>headphones</b>. This page talks to the production API (auth required).</p>
+
+<div class="field"><label>API key:</label><input id="apikey" placeholder="va_..." value=""></div>
+<div class="field"><label>Agent id:</label><input id="agent" value="default"></div>
+<div class="field"><label>API host:</label><input id="apihost" value=""></div>
+<p><label><input type="checkbox" id="dsp"> Browser noise suppression + auto-gain</label></p>
+<button id="start">Start call</button> <button id="stop" disabled>End call</button>
+<div id="status">idle</div>
+<div id="mic">mic: -</div>
+<div style="background:#ddd;height:10px;border-radius:5px;overflow:hidden;margin-bottom:.5rem"><div id="lvl" style="height:100%;width:0;background:#16a34a"></div></div>
+<div id="log"></div>
+
+<script>
+const RATE = 16000;
+let ws, ctx, micStream, node, nextPlayTime = 0, playing = new Set(), sessionId = null, pollTimer = null;
+const $ = id => document.getElementById(id);
+const log = m => { $('log').textContent += m + '\n'; $('log').scrollTop = 1e9; };
+
+// Default API host to current page origin
+$('apihost').value = location.origin;
+
+// AudioWorklet (same as dev mode)
+const workletSrc = `
+class Capture extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = []; this.ratio = sampleRate / ${RATE}; this.pos = 0; }
+  process(inputs) {
+    const ch = inputs[0][0]; if (!ch) return true;
+    for (; this.pos < ch.length; this.pos += this.ratio) {
+      const i = Math.floor(this.pos), j = Math.min(ch.length, Math.floor(this.pos + this.ratio));
+      let s = 0; for (let k = i; k < j; k++) s += ch[k];
+      this.buf.push(s / Math.max(1, j - i));
+    }
+    this.pos -= ch.length;
+    if (this.buf.length >= 320) {
+      const out = new Int16Array(this.buf.length);
+      for (let k = 0; k < out.length; k++) out[k] = Math.max(-1, Math.min(1, this.buf[k])) * 32767;
+      this.port.postMessage(out.buffer, [out.buffer]); this.buf = [];
+    }
+    return true;
+  }
+}
+registerProcessor('capture', Capture);`;
+
+function apiHeaders() {
+  return {
+    'Authorization': 'Bearer ' + $('apikey').value.trim(),
+    'Content-Type': 'application/json',
+  };
+}
+
+function apiBase() {
+  return $('apihost').value.trim().replace(/\/+$/, '');
+}
+
+async function start() {
+  const key = $('apikey').value.trim();
+  if (!key) { log('ERROR: enter an API key'); return; }
+
+  $('start').disabled = true;
+  $('status').textContent = 'requesting call...';
+
+  // 1. Start the call via API
+  let callData;
+  try {
+    const resp = await fetch(apiBase() + '/v1/calls/web', {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ agent_id: $('agent').value.trim() }),
+    });
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(`API ${resp.status}: ${err}`);
+    }
+    callData = await resp.json();
+  } catch (e) {
+    log('ERROR starting call: ' + e.message);
+    $('start').disabled = false;
+    $('status').textContent = 'idle';
+    return;
+  }
+
+  sessionId = callData.session_id;
+  log('session: ' + sessionId);
+  log('ws_token: ' + callData.ws_token.substring(0, 20) + '...');
+  $('status').textContent = 'waiting for worker...';
+
+  // 2. Poll for worker_ws_url (worker publishes it after claiming the job)
+  let workerUrl = callData.worker_ws_url;
+  if (!workerUrl) {
+    workerUrl = await pollForWorker(sessionId);
+  }
+  if (!workerUrl) {
+    log('ERROR: worker did not start in time');
+    $('start').disabled = false;
+    $('status').textContent = 'idle';
+    return;
+  }
+
+  log('worker URL: ' + workerUrl);
+  $('status').textContent = 'connecting to worker...';
+
+  // 3. Get mic access
+  micStream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true,
+             noiseSuppression: $('dsp').checked, autoGainControl: $('dsp').checked }
+  });
+  ctx = new AudioContext();
+  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([workletSrc], { type: 'text/javascript' })));
+  node = new AudioWorkletNode(ctx, 'capture');
+  ctx.createMediaStreamSource(micStream).connect(node);
+
+  // 4. Connect to worker's WebSocket (with retry — server may still be starting)
+  $('status').textContent = 'connecting to worker...';
+  const maxRetries = 5;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const connected = await new Promise(resolve => {
+      ws = new WebSocket(workerUrl);
+      ws.binaryType = 'arraybuffer';
+      ws.onopen = () => {
+        $('status').textContent = 'connected - talk!';
+        $('stop').disabled = false;
+        log('connected to worker');
+        resolve(true);
+      };
+      ws.onclose = e => {
+        if (e.code !== 1000) resolve(false);
+        else { log(`closed (${e.code} ${e.reason})`); cleanup(); resolve(true); }
+      };
+      ws.onerror = () => {};
+      ws.onmessage = e => typeof e.data === 'string' ? onControl(JSON.parse(e.data)) : playPcm(e.data);
+    });
+    if (connected) break;
+    if (attempt < maxRetries) {
+      log(`WS connect attempt ${attempt}/${maxRetries} failed, retrying...`);
+      await new Promise(r => setTimeout(r, 1000));
+    } else {
+      log('ERROR: could not connect to worker after ' + maxRetries + ' attempts');
+      cleanup();
+      return;
+    }
+  }
+  // Re-attach close handler for normal operation
+  ws.onclose = e => { log(`closed (${e.code} ${e.reason})`); cleanup(); };
+  ws.onerror = e => { log('WS error'); };
+
+  const label = micStream.getAudioTracks()[0].label;
+  $('mic').textContent = 'mic: ' + label;
+  log('using mic: ' + label + ' | noise-suppression/AGC: ' + ($('dsp').checked ? 'on' : 'off'));
+
+  let peakSeen = 0, t0 = Date.now(), warned = false;
+  node.port.onmessage = e => {
+    if (ws && ws.readyState === 1) ws.send(e.data);
+    const a = new Int16Array(e.data); let pk = 0;
+    for (let i = 0; i < a.length; i += 8) pk = Math.max(pk, Math.abs(a[i]));
+    peakSeen = Math.max(peakSeen, pk);
+    $('lvl').style.width = Math.min(100, pk / 200) + '%';
+    if (!warned && Date.now() - t0 > 4000 && peakSeen < 150) {
+      warned = true;
+      log('WARNING: mic is silent. Wrong or muted input device?');
+      $('status').textContent = 'MIC SILENT - check input device';
+      $('status').style.color = '#dc2626';
+    }
+  };
+}
+
+async function pollForWorker(sid) {
+  const deadline = Date.now() + 15000; // 15s timeout
+  while (Date.now() < deadline) {
+    try {
+      const resp = await fetch(apiBase() + '/v1/calls/' + sid, {
+        headers: apiHeaders(),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.worker_ws_url) return data.worker_ws_url;
+        if (data.status === 'failed' || data.status === 'ended') {
+          log('session ended before worker connected: ' + data.status);
+          return null;
+        }
+      }
+    } catch (e) { /* retry */ }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  return null;
+}
+
+function onControl(msg) {
+  if (msg.type === 'gate') {
+    const sc = msg.score == null ? '' : ` (score ${msg.score})`;
+    if (msg.event === 'enrolled') { log('voice registered - other voices ignored'); $('status').textContent = 'voice registered'; }
+    else if (msg.event.startsWith('blocked')) log('ignored noise/other voice' + sc);
+    return;
+  }
+  if (msg.type === 'clear') {
+    playing.forEach(s => { try { s.stop(); } catch {} }); playing.clear();
+    nextPlayTime = 0; log('(interrupted)');
+  }
+}
+
+function playPcm(buf) {
+  const i16 = new Int16Array(buf, 0, buf.byteLength >> 1);
+  const f32 = Float32Array.from(i16, v => v / 32768);
+  const ab = ctx.createBuffer(1, f32.length, RATE); ab.copyToChannel(f32, 0);
+  const src = ctx.createBufferSource(); src.buffer = ab; src.connect(ctx.destination);
+  const t = Math.max(ctx.currentTime + 0.05, nextPlayTime);
+  src.start(t); nextPlayTime = t + ab.duration;
+  playing.add(src); src.onended = () => playing.delete(src);
+}
+
+function cleanup() {
+  micStream?.getTracks().forEach(t => t.stop());
+  ctx?.close();
+  node = ctx = ws = null;
+  sessionId = null;
+  $('start').disabled = false; $('stop').disabled = true;
+  $('status').textContent = 'idle'; $('status').style.color = '';
+  $('lvl').style.width = '0'; nextPlayTime = 0;
+}
+
+$('start').onclick = () => start().catch(e => { log('error: ' + e.message); cleanup(); });
+$('stop').onclick = () => {
+  if (sessionId) {
+    fetch(apiBase() + '/v1/calls/' + sessionId + '/end', {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({ reason: 'client_hangup' }),
+    }).catch(() => {});
+  }
+  ws?.close();
+};
+</script>
+</body>
+</html>
